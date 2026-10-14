@@ -1,0 +1,14 @@
+[package]
+name = "SEE-SecureSmartThermostat"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled", "chrono"] }
+rand_core = "0.10.1"
+argon2 = "0.6.0"
+rpassword = "7.5.4"
+password-hash = "0.6.1"
+rand = "0.10.3"
+chrono = "0.4.45"
+dotenvy = "0.15.7"
