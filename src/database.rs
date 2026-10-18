@@ -7,6 +7,7 @@ use crate::auth::{self, Role, User};
 use chrono::prelude::*;
 
 
+#[derive(Debug)]
 pub enum AuthError {
     InvalidCredentials,
     AccountLocked, // 
@@ -17,6 +18,19 @@ pub enum AuthError {
 impl From<rusqlite::Error> for AuthError {
     fn from(err: rusqlite::Error) -> Self {
         AuthError::DatabaseError(err)
+    }
+}
+
+#[derive(Debug)]
+pub enum CreateAccountError {
+    InvalidPassword(auth::PasswordCheckError),
+    InvalidPin(auth::PinCheckError),
+    Database(rusqlite::Error),
+}
+
+impl From<rusqlite::Error> for CreateAccountError {
+    fn from(err: rusqlite::Error) -> Self {
+        CreateAccountError::Database(err)
     }
 }
 
@@ -64,6 +78,49 @@ pub fn init_db() -> Result<Connection> {
 
 }
 
+pub fn create_homeowner(conn: &Connection, username: &str, password: &str) -> Result<(), CreateAccountError> {
+    auth::password_check(password).map_err(CreateAccountError::InvalidPassword)?;
+
+    let hash = auth::password_hasher(password);
+    conn.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
+        params![username, hash, "Homeowner"],
+    )?;
+
+    Ok(())
+}
+
+pub fn create_guest(conn: &Connection, name: &str, pin: &str) -> Result<(), CreateAccountError> {
+    auth::pin_check(pin).map_err(CreateAccountError::InvalidPin)?;
+
+    let hash = auth::password_hasher(pin);
+    conn.execute(
+        "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
+        params![name, hash, "Guest"],
+    )?;
+
+    Ok(())
+}
+
+pub fn create_technician(conn: &Connection, username: &str, password: &str) -> Result<(), CreateAccountError> {
+    auth::password_check(password).map_err(CreateAccountError::InvalidPassword)?;
+
+    let hash = auth::password_hasher(password);
+
+    // No access window has been opened yet. valid_until is set to an already-expired
+    // timestamp so auth_user's expiry check denies login by default, until a
+    // window-granting function (homeowner-controlled) sets it to a future time.
+    let closed_window = DateTime::<Utc>::from_timestamp(0, 0)
+        .expect("unix epoch is always a valid timestamp");
+
+    conn.execute(
+        "INSERT INTO users (username, password_hash, role, valid_until) VALUES (?1, ?2, ?3, ?4)",
+        params![username, hash, "Technician", closed_window],
+    )?;
+
+    Ok(())
+}
+
 
 pub fn auth_user(conn: &Connection, username: &str, password: &str) -> Result<User, AuthError> {
    let sql_data = conn.query_row(
@@ -90,8 +147,7 @@ pub fn auth_user(conn: &Connection, username: &str, password: &str) -> Result<Us
         None => return Err(AuthError::InvalidCredentials),
     };
 
-    
-    let role= Role::str_to_emum(&role_str).unwrap();
+    let role= Role::str_to_enum(&role_str).unwrap();
 
     if is_locked{
         return Err(AuthError::AccountLocked);
@@ -132,14 +188,80 @@ pub fn auth_user(conn: &Connection, username: &str, password: &str) -> Result<Us
             )?;
     }
 
-     // due 
+     // due
     Ok(User{
         id,
         username: uname,
         role,
         valid_until,
         failed_attempts: 0,
-        is_locked: false,  
+        is_locked: false,
     })
-} 
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                valid_until INTEGER,
+                failed_attempts INTEGER DEFAULT 0,
+                is_locked INTEGER DEFAULT 0
+            );",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn create_homeowner_then_login() {
+        let conn = test_db();
+        create_homeowner(&conn, "alice", "CorrectHorse1!").unwrap();
+
+        let user = auth_user(&conn, "alice", "CorrectHorse1!").unwrap();
+        assert_eq!(user.username, "alice");
+        assert!(matches!(user.role, Role::Homeowner));
+    }
+
+    #[test]
+    fn create_guest_then_login_with_pin() {
+        let conn = test_db();
+        create_guest(&conn, "visitor", "482917").unwrap();
+
+        let user = auth_user(&conn, "visitor", "482917").unwrap();
+        assert!(matches!(user.role, Role::Guest));
+    }
+
+    #[test]
+    fn create_guest_rejects_bad_pin() {
+        let conn = test_db();
+        let err = create_guest(&conn, "visitor", "111111").unwrap_err();
+        assert!(matches!(err, CreateAccountError::InvalidPin(_)));
+    }
+
+    #[test]
+    fn create_technician_cannot_login_until_window_opened() {
+        let conn = test_db();
+        create_technician(&conn, "bob", "ServiceVisit1!").unwrap();
+
+        let result = auth_user(&conn, "bob", "ServiceVisit1!");
+        assert!(matches!(result, Err(AuthError::ExpiredAccount)));
+    }
+
+    #[test]
+    fn duplicate_name_across_roles_is_rejected() {
+        let conn = test_db();
+        create_homeowner(&conn, "sam", "CorrectHorse1!").unwrap();
+
+        let err = create_guest(&conn, "sam", "482917").unwrap_err();
+        assert!(matches!(err, CreateAccountError::Database(_)));
+    }
+}
