@@ -20,6 +20,7 @@ pub fn select_role() -> Option<Role> {
         _ => return None,
     })
 } 
+
 pub fn login(conn: &Connection, role: Role) -> Option<User> {
     let mut username = String::new();
 
@@ -27,7 +28,6 @@ pub fn login(conn: &Connection, role: Role) -> Option<User> {
     Role::Guest => {
     println!("Enter Guest ID:");
     io::stdin().read_line(&mut username).ok()?;
-
     rpassword::prompt_password("Enter PIN: ").ok()?
 }
     _ => {
@@ -54,44 +54,51 @@ pub fn login(conn: &Connection, role: Role) -> Option<User> {
 }
 
 pub fn run_cli(conn: &Connection) {
-    let Some(role) = select_role() else {
-        println!("Invalid role!");
-        return;
-    };
-
-    let Some(user) = login(conn, role) else {
-        return;
-    };
-
-    match user.role {
-    Role::Homeowner => {
-        println!("1. Create Guest");
-        println!("2. Unlock Guest");
-        println!("3. Create Technician");
-        println!("4. Reset Guest PIN");
-        println!("5. Revoke Guest Access");
-        println!("6. Revoke Technician Access");
-        println!("7. Logout");
+    loop {
+        println!("\n=== SMART THERMOSTAT ===");
+        println!("1. Login");
+        println!("2. Exit Application");
+        println!("Select an option:");
 
         let mut choice = String::new();
-        if io::stdin().read_line(&mut choice).is_err() {
-            return;
+
+        match io::stdin().read_line(&mut choice) {
+            Ok(0) | Err(_) => {
+                println!("Exiting application...");
+                break;
+            }
+            Ok(_) => {}
         }
 
         match choice.trim() {
-        "1" => create_guest(conn, &user),
-        "2" => unlock_guest(conn, &user),
-        "3" => create_technician(conn, &user),
-        "4" => reset_guest_pin(conn, &user),
-        "5" => revoke_guest_access(conn, &user),
-        "6" => revoke_technician_access(conn, &user),
-        "7" => println!("Logged out."),
-        _ => println!("Invalid option."),
-}
+            "1" => {
+                let Some(role) = select_role() else {
+                    println!("Invalid role! Please try again.");
+                    continue;
+                };
+
+                let Some(user) = login(conn, role) else {
+                    println!("Login failed. Please try again.");
+                    continue;
+                };
+
+                match user.role {
+                    Role::Homeowner => homeowner_menu(conn, &user),
+                    Role::Technician => technician_menu(),
+                    Role::Guest => guest_menu(),
+                }
+
+                println!("Returning to main menu...");
+            }
+
+            "2" => {
+                println!("Thank you for using Smart Thermostat!");
+                break;
+            }
+
+            _ => println!("Invalid option. Please try again."),
+        }
     }
-    Role::Technician => println!("Technician menu"),
-    Role::Guest => println!("Guest menu"),
-}
 }
 pub fn access_valid(user: &User) -> bool {
     match user.valid_until {
@@ -164,7 +171,6 @@ pub fn create_guest(conn: &Connection, owner: &User) {
         return;
     }
 };
-
 
 let expires = Utc::now() + Duration::hours(hours);
 let pin_hash = crate::auth::password_hasher(&pin);
@@ -393,4 +399,146 @@ pub fn revoke_technician_access(conn: &Connection, owner: &User) {
         Ok(_) => println!("Unexpected number of updated accounts."),
         Err(e) => println!("Failed to revoke Technician access: {}", e),
     }
+} 
+
+/// Displays the Homeowner interface.
+/// Thermostat features are placeholders until integration.
+
+pub fn homeowner_menu(conn: &Connection, user: &User) {
+    loop {
+        // Check whether access is still valid.
+        if !access_valid(user) {
+            println!("Access expired. Logging out.");
+            break;
+        }
+
+        println!("\n=== HOMEOWNER MENU ===");
+        println!("1. View Indoor Temperature");
+        println!("2. View Outdoor Weather");
+        println!("3. Control HVAC System");
+        println!("4. Manage Temperature Schedule");
+        println!("5. Manage Thermostat Profiles");
+        println!("6. Run System Diagnostics");
+        println!("7. Create User");
+        println!("8. Unlock Guest");
+        println!("9. Reset Guest PIN");
+        println!("10. Revoke Guest Access");
+        println!("11. Revoke Technician Access");
+        println!("12. Logout");
+
+        let mut choice = String::new();
+
+        if io::stdin().read_line(&mut choice).is_err() {
+            println!("Failed to read input.");
+            break;
+        }
+
+        match choice.trim() {
+            
+"7" => {
+    println!("\n=== CREATE USER ===");
+    println!("1. Guest");
+    println!("2. Technician");
+    println!("Select a role:");
+
+    let mut role_choice = String::new();
+
+    if io::stdin().read_line(&mut role_choice).is_err() {
+        println!("Failed to read input.");
+        continue;
+    }
+
+    match role_choice.trim() {
+        "1" => create_guest(conn, user),
+        "2" => create_technician(conn, user),
+        _ => println!("Invalid role."),
+    }
+},
+            "8" => unlock_guest(conn, user),
+            "9" => reset_guest_pin(conn, user),
+            "10" => revoke_guest_access(conn, user),
+            "11" => revoke_technician_access(conn, user),
+
+            "12" => {
+                println!("Logged out.");
+                break;
+            }
+
+            "1" | "2" | "3" | "4" | "5" | "6" => {
+                println!("Feature not implemented yet.");
+            }
+
+            _ => println!("Invalid option."),
+        }
+    }
 }
+
+/// Displays the Technician interface.
+/// Diagnostic and thermostat functions will be integrated later.
+pub fn technician_menu() {
+    loop {
+        println!("\n=== TECHNICIAN MENU ===");
+        println!("1. View Indoor Temperature");
+        println!("2. View Outdoor Weather");
+        println!("3. Control HVAC System");
+        println!("4. View Thermostat Profiles");
+        println!("5. Run System Diagnostics");
+        println!("6. View System Status");
+        println!("7. Logout");
+
+        let mut choice = String::new();
+
+        if io::stdin().read_line(&mut choice).is_err() {
+            println!("Failed to read input.");
+            break;
+        }
+
+        match choice.trim() {
+            "1" | "2" | "3" | "4" | "5" | "6" => {
+                println!("Feature not implemented yet.");
+            }
+
+            "7" => {
+                println!("Logged out.");
+                break;
+            }
+
+            _ => println!("Invalid option."),
+        }
+    }
+}
+/// Displays the Guest interface.
+/// Guests can only access permitted thermostat features.
+pub fn guest_menu() {
+    loop {
+        println!("\n=== GUEST MENU ===");
+        println!("1. View Indoor Temperature");
+        println!("2. View Outdoor Weather");
+        println!("3. Control HVAC System");
+        println!("4. Select Thermostat Profile");
+        println!("5. Logout");
+
+        let mut choice = String::new();
+
+        println!("Select an option:");
+
+        if io::stdin().read_line(&mut choice).is_err() {
+            println!("Failed to read input.");
+            break;
+        }
+
+        match choice.trim() {
+            "1" | "2" | "3" | "4" => {
+                println!("Feature not implemented yet.");
+            }
+
+            "5" => {
+                println!("Logged out.");
+                break;
+            }
+
+            _ => println!("Invalid option."),
+        }
+    }
+}
+
