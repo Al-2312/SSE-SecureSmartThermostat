@@ -1,5 +1,7 @@
 mod database;
 mod auth;
+mod profiles;
+mod sensors;
 
 fn main() {
     dotenvy::dotenv().ok();
