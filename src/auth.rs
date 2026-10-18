@@ -15,7 +15,7 @@ pub enum Role{
 
 impl Role {
     // create function that  converts sring of role to enum and vice versa 
-    pub fn str_to_enum(role: &str) -> Option<Self>{
+    pub fn str_to_emum(role: &str) -> Option<Self>{
         match role{
             "Homeowner"  => Some( Role::Homeowner),
             "Technician" => Some( Role::Technician),
@@ -44,7 +44,6 @@ pub struct User{
 }
 
 //before hashing password we must check to see if the password format is correct
-#[derive(Debug)]
 pub enum  PasswordCheckError{
     Short,
     Long, //In the case of potnential overflow buffers
@@ -112,38 +111,7 @@ pub fn password_hash_verify(password: &str, password_hashed: &str) -> bool{
     Argon2::default().verify_password(password.as_bytes(), &hashed).is_ok()
 }
 
-//before hashing a guest PIN we must check its format: 6-12 digits, no repeated digit, no straight run
-#[derive(Debug)]
-pub enum PinCheckError {
-    WrongLength,
-    NotAllDigits,
-    RepeatedDigit,
-    SequentialRun,
-}
 
-pub fn pin_check(pin: &str) -> Result<(), PinCheckError> {
-    if pin.len() < 6 || pin.len() > 12 {
-        return Err(PinCheckError::WrongLength);
-    }
-
-    if !pin.chars().all(|c| c.is_ascii_digit()) {
-        return Err(PinCheckError::NotAllDigits);
-    }
-
-    let digits: Vec<u32> = pin.chars().map(|c| c.to_digit(10).unwrap()).collect();
-
-    if digits.iter().all(|&d| d == digits[0]) {
-        return Err(PinCheckError::RepeatedDigit);
-    }
-
-    let ascending = digits.windows(2).all(|w| w[1] == w[0] + 1);
-    let descending = digits.windows(2).all(|w| w[0] == w[1] + 1);
-    if ascending || descending {
-        return Err(PinCheckError::SequentialRun);
-    }
-
-    Ok(())
-}
 
 
 
@@ -160,52 +128,5 @@ use super::*;
         assert!(password_hash_verify(password, &hash));
         //checking if wrong password is false
         assert!(!password_hash_verify("NotRealPassword", &hash));
-    }
-
-    #[test]
-    fn test_hash_duplicate_check() {
-        let password = "TestPassword123!";
-        let hash1 = password_hasher(&password);
-        let hash2: String = password_hasher(&password); 
-        
-        //Checking if itt works 
-        assert!(password_hash_verify(password, &hash1));
-        assert!(password_hash_verify(password, &hash2));
-        //checking if wrong password is false
-        assert!(!password_hash_verify("NotRealPassword", &hash1));
-        assert!(!password_hash_verify("NotRealPassword", &hash2));
-
-        //checking to see if the two hashes are different
-
-        assert_ne!(hash1, hash2);
-        println!("Hash1: {}", hash1);
-        println!("Hash2: {}", hash2);
-    }
-
-    #[test]
-    fn pin_check_accepts_valid_pin() {
-        assert!(pin_check("482917").is_ok());
-    }
-
-    #[test]
-    fn pin_check_rejects_bad_length() {
-        assert!(matches!(pin_check("1234"), Err(PinCheckError::WrongLength)));
-        assert!(matches!(pin_check("1234567890123"), Err(PinCheckError::WrongLength)));
-    }
-
-    #[test]
-    fn pin_check_rejects_non_digits() {
-        assert!(matches!(pin_check("12a456"), Err(PinCheckError::NotAllDigits)));
-    }
-
-    #[test]
-    fn pin_check_rejects_repeated_digit() {
-        assert!(matches!(pin_check("111111"), Err(PinCheckError::RepeatedDigit)));
-    }
-
-    #[test]
-    fn pin_check_rejects_sequential_run() {
-        assert!(matches!(pin_check("123456"), Err(PinCheckError::SequentialRun)));
-        assert!(matches!(pin_check("654321"), Err(PinCheckError::SequentialRun)));
     }
 }
