@@ -1,0 +1,11 @@
+# Simulated outside world. Edit this while the thermostat is running: the next screen picks it up.
+#
+# Weather is generated automatically. Uncomment a line (remove the leading #) to override that
+# value; comment it out again to go back to the generated value.
+# A bad or out-of-range value counts as a sensor fault: heating and cooling stop until it's fixed.
+#
+# outdoor_f = 41             # -60 to 130
+# outdoor_humidity_pct = 80  # 0 to 100
+# precipitation_mm_hr = 2.5  # 0 to 100
+# co_ppm = 3                 # 0 to 1000
+# indoor_humidity_pct = 45   # 0 to 100
