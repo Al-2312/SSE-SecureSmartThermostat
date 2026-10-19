@@ -402,8 +402,6 @@ pub fn revoke_technician_access(conn: &Connection, owner: &User) {
 } 
 
 /// Displays the Homeowner interface.
-/// Thermostat features are placeholders until integration.
-
 pub fn homeowner_menu(conn: &Connection, user: &User) {
     loop {
         // Check whether access is still valid.
@@ -474,7 +472,6 @@ pub fn homeowner_menu(conn: &Connection, user: &User) {
 }
 
 /// Displays the Technician interface.
-/// Diagnostic and thermostat functions will be integrated later.
 pub fn technician_menu() {
     loop {
         println!("\n=== TECHNICIAN MENU ===");
