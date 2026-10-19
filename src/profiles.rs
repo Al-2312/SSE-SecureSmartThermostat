@@ -54,7 +54,6 @@ pub enum ProfileError {
     NotAllowed,
     InvalidName,
     InvalidTarget,
-    DuplicateName,
     NotFound,
     BuiltInProtected,
     CorruptData,
@@ -158,15 +157,6 @@ fn get_profile(conn: &Connection, id: u32) -> Result<Profile, ProfileError> {
     }
 }
 
-fn name_taken(conn: &Connection, name: &str, except_id: u32) -> Result<bool, ProfileError> {
-    let taken: bool = conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM profiles WHERE name = ?1 AND id != ?2)",
-        params![name, except_id],
-        |row| row.get(0),
-    )?;
-    Ok(taken)
-}
-
 // Any logged-in role may list profiles
 pub fn list_profiles(conn: &Connection) -> Result<Vec<Profile>, ProfileError> {
     let mut stmt = conn.prepare(
@@ -191,10 +181,8 @@ pub fn create_profile(
     require_homeowner(user)?;
     check_name(name)?;
     check_target(target_f)?;
-    if name_taken(conn, name, 0)? {
-        return Err(ProfileError::DuplicateName);
-    }
 
+    // A duplicate name is rejected by the UNIQUE constraint on profiles.name
     conn.execute(
         "INSERT INTO profiles (name, mode, target_f, built_in) VALUES (?1, ?2, ?3, 0);",
         params![name, mode.as_str(), target_f],
@@ -215,10 +203,8 @@ pub fn update_profile(
     get_profile(conn, id)?; // NotFound before anything else changes
     check_name(name)?;
     check_target(target_f)?;
-    if name_taken(conn, name, id)? {
-        return Err(ProfileError::DuplicateName);
-    }
 
+    // A duplicate name is rejected by the UNIQUE constraint on profiles.name
     conn.execute(
         "UPDATE profiles SET name = ?1, mode = ?2, target_f = ?3 WHERE id = ?4",
         params![name, mode.as_str(), target_f, id],
@@ -240,7 +226,7 @@ pub fn delete_profile(conn: &Connection, user: &User, id: u32) -> Result<(), Pro
 
 // Any role may activate a profile. A guest can ONLY pick from the existing profiles; they never
 // choose their own temperature (that is a separate action guests are not allowed to do).
-// Returns the profile to apply; nothing stores the "current settings" yet.
+// Returns the profile to apply; thermostat::apply_profile copies it into the live settings.
 pub fn activate_profile(conn: &Connection, _user: &User, id: u32) -> Result<Profile, ProfileError> {
     get_profile(conn, id)
 }
@@ -330,7 +316,7 @@ mod tests {
     fn rejects_duplicate_names_case_insensitively() {
         let conn = setup();
         let h = user(Role::Homeowner);
-        assert!(matches!(create_profile(&conn, &h, "home", Mode::Auto, 70), Err(ProfileError::DuplicateName)));
+        assert!(matches!(create_profile(&conn, &h, "home", Mode::Auto, 70), Err(ProfileError::DatabaseError(_))));
     }
 
     #[test]
@@ -352,7 +338,7 @@ mod tests {
         let h = user(Role::Homeowner);
         let id = id_of(&conn, "Home");
         assert!(update_profile(&conn, &h, id, "Home", Mode::Auto, 73).is_ok());
-        assert!(matches!(update_profile(&conn, &h, id, "Away", Mode::Auto, 73), Err(ProfileError::DuplicateName)));
+        assert!(matches!(update_profile(&conn, &h, id, "Away", Mode::Auto, 73), Err(ProfileError::DatabaseError(_))));
     }
 
     #[test]
